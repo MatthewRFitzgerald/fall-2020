@@ -93,12 +93,10 @@ function allwrap()
         # Create Kx(J-1) array with an additional column of zeros (i.e. a KxJ array)
         bigAlpha = [reshape(alpha, K, J-1) zeros(K)]
 
-        # Store the promoted type of X and alpha in variable T
-        T = promote_type(eltype(X), eltype(alpha))
-        # Initialize numerator (array of zeros of type T and size NxJ)
-        num = zeros(T, N, J)
-        # Initialize denominator (array of zeros of type T and size N)
-        dem = zeros(T, N)
+        # Initialize numerator (array of zeros of size NxJ)
+        num = zeros(N, J)
+        # Initialize denominator (array of zeros of size N)
+        dem = zeros(N)
         # Create denominator of liklihood's ( 1 + Σ(exp(Xβ)) )
         for j= 1:J
             num[:,j] = exp.(X*bigAlpha[:,j])
@@ -120,10 +118,79 @@ function allwrap()
      -16.71729, 3.047838915333801, -0.020156086187477475, -0.5586905548633996, -4.1336372137203305]
     alpha_start = alpha_true.*rand(size(alpha_true))
     println(size(alpha_true))
-    alpha_hat_optim = optimize(a -> mlogit(a, X, y), alpha_start, LBFGS(), Optim.Options(g_tol = 1e-5, iterations = 100_000, show_trace = true, show_every = 50))
+    #alpha_hat_optim = optimize(a -> mlogit(a, X, y), alpha_start, LBFGS(), Optim.Options(g_tol = 1e-5, iterations = 100_000, show_trace = true, show_every = 50))
+    alpha_hat_optim_test = optimize(a -> mlogit(a, X, y), alpha_start, Newton(), Optim.Options(g_tol = 1e-5, iterations = 100_000, show_trace = true, show_every = 50))
     alpha_hat_mle = alpha_hat_optim.minimizer
     println(alpha_hat_mle)
+    end
+
+    return nothing
 end
+
+    #:::::::::::::::::::::::::::::::::::::::::::::::::::
+    # bonus: how to get standard errors?
+    # need to obtain the hessian of the obj fun
+    #:::::::::::::::::::::::::::::::::::::::::::::::::::
+    # first, we need to slightly modify our objective function
+
+    using LinearAlgebra
+    function mlogit_for_h(alpha, X, y)
+
+        # Get number of columns of X
+        K = size(X, 2)
+        # Get number of discrete values outcome can take
+        J = length(unique(y))
+        # Get length of outcome vector
+        N = length(y) # Get
+        # Create array of zeros with N rows and J columns
+        bigY = zeros(N,J)
+        # Fill bigY with T/F
+        for j=1:J
+            bigY[:, j] = y.== j
+        end
+        # Create Kx(J-1) array with an additional column of zeros (i.e. a KxJ array)
+        bigAlpha = [reshape(alpha, K, J-1) zeros(K)]
+
+        #:::::::::::::
+        # New Code
+        #:::::::::::::
+        # Store the promoted type of X and alpha in variable T
+        T = promote_type(eltype(X), eltype(alpha))
+        # Initialize numerator (array of zeros of type T and size NxJ)
+        num = zeros(T, N, J)
+        # Initialize denominator (array of zeros of type T and size N)
+        dem = zeros(T, N)
+        #:::::::::::::
+
+        # Create denominator of liklihood's ( 1 + Σ(exp(Xβ)) )
+        for j= 1:J
+            num[:,j] = exp.(X*bigAlpha[:,j])
+            dem .+= num[:,j]
+        end
+
+        P = num./repeat(dem, 1, J)
+
+        loglike = -sum( bigY.*log.(P) )
+
+        # your turn
+
+        return loglike
+    end
+
+    # Declare that objective function is twice differentiable
+    td = TwiceDifferentiable(b -> mlogit_for_h(b, X, y), alpha_start; autodiff =:forward)
+    # Run the optimizer
+    alpha_hat_optim_ad = optimize(td, alpha_zero, Newton(), Optim.Options(g_tol = 1e-5, iterations = 100_000, show_every = 50))
+    alpha_hat_mle_ad = alpha_hat_optim_ad.minimizer
+    # Evaluate the Hessian at the estimates
+    H = Optim.hessian!(td, alpha_hat_mle_ad)
+    # Standard errors = sqrt(diag(inv(H))) [usually it's -H but we already mult. the obj. fun by -1]
+    alpha_hat_mle_ad_se = sqrt.(diag(inv(H)))
+    println([alpha_hat_mle_ad alpha_hat_mle_ad_se]) # These standard errors match Stata
+
+#    return nothing
+#end
+
 
 #:::::::::::::::::::::::::::::::::::::::::::::::::::
 # question 6
