@@ -90,7 +90,10 @@ function allwrap()
         for j=1:J
             bigY[:, j] = y.== j
         end
-        # Create Kx(J-1) array with an additional column of zeros (i.e. a KxJ array)
+        #=
+        Create Kx(J-1) array with an additional column of zeros (i.e. a KxJ array)
+        Note this takes alpha (a vector) and transforms it into a KxJ array.
+         =#
         bigAlpha = [reshape(alpha, K, J-1) zeros(K)]
 
         # Initialize numerator (array of zeros of size NxJ)
